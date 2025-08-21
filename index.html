@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>QR Scanner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #121212;
+      color: #fff;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      height: 100vh;
+      padding: 20px;
+    }
+
+    h1 {
+      margin-bottom: 20px;
+      font-size: 1.8rem;
+      color: #00ffcc;
+    }
+
+    .scanner {
+      position: relative;
+      width: 320px;
+      height: 240px;
+      border: 3px solid #00ffcc;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* scanning line effect */
+    .scanner::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 3px;
+      background: #00ffcc;
+      animation: scan 2s linear infinite;
+    }
+
+    @keyframes scan {
+      0% { top: 0; }
+      100% { top: calc(100% - 3px); }
+    }
+
+    pre {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      background: #1e1e1e;
+      padding: 10px 15px;
+      border-radius: 8px;
+      border: 1px solid #333;
+      min-width: 280px;
+      text-align: center;
+      word-wrap: break-word;
+    }
+  </style>
+</head>
+<body>
+  <h1>QR Scanner</h1>
+  <div class="scanner">
+    <video id="video" playsinline autoplay></video>
+  </div>
+  <pre id="result">Waiting for QR code...</pre>
+
+  <!-- jsQR library -->
+  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+
+  <script>
+    const video = document.getElementById("video");
+    const result = document.getElementById("result");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    async function start() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        await video.play();
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        requestAnimationFrame(scan);
+      } catch (err) {
+        result.textContent = "Camera error: " + err.message;
+      }
+    }
+
+    function scan() {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(img.data, img.width, img.height);
+
+      if (code) {
+        result.textContent = "✅ Scanned: " + code.data;
+        console.log('This is the code ::: ', code);
+        // Stop camera after scan
+        video.srcObject.getTracks().forEach(track => track.stop());
+      } else {
+        requestAnimationFrame(scan);
+      }
+    }
+
+    start();
+  </script>
+</body>
+</html>
+
