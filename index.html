@@ -1,127 +1,151 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>QR Scanner</title>
   <style>
     body {
       font-family: Arial, sans-serif;
-      background: #121212;
-      color: #fff;
-      margin: 0;
+      background: #f7f7f7;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: flex-start;
-      height: 100vh;
-      padding: 20px;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
     }
 
     h1 {
-      margin-bottom: 20px;
-      font-size: 1.8rem;
-      color: #00ffcc;
+      color: #333;
     }
 
-    .scanner {
+    .scanner-container {
       position: relative;
-      width: 320px;
-      height: 240px;
-      border: 3px solid #00ffcc;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 0 20px rgba(0, 255, 204, 0.5);
+      display: inline-block;
+      margin-top: 20px;
     }
 
     video {
-      width: 100%;
-      height: 100%;
+      border: 3px solid #333;
+      border-radius: 12px;
+      width: 320px;
+      height: 240px;
       object-fit: cover;
     }
 
-    /* scanning line effect */
-    .scanner::after {
-      content: "";
+    /* Overlay frame effect */
+    .frame {
       position: absolute;
       top: 0;
       left: 0;
-      width: 100%;
-      height: 3px;
-      background: #00ffcc;
-      animation: scan 2s linear infinite;
+      width: 320px;
+      height: 240px;
+      border: 3px dashed #00b894;
+      border-radius: 12px;
+      box-sizing: border-box;
+      pointer-events: none;
     }
 
-    @keyframes scan {
-      0% { top: 0; }
-      100% { top: calc(100% - 3px); }
+    #result {
+      margin-top: 15px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #2d3436;
     }
 
-    pre {
+    .note {
+      margin-top: 10px;
+      color: #636e72;
+      font-size: 14px;
+    }
+
+    button {
       margin-top: 20px;
-      font-size: 1.2rem;
-      background: #1e1e1e;
-      padding: 10px 15px;
-      border-radius: 8px;
-      border: 1px solid #333;
-      min-width: 280px;
-      text-align: center;
-      word-wrap: break-word;
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      background: #0984e3;
+      color: #fff;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background: #74b9ff;
     }
   </style>
 </head>
 <body>
-  <h1>QR Scanner</h1>
-  <div class="scanner">
-    <video id="video" playsinline autoplay></video>
-  </div>
-  <pre id="result">Waiting for QR code...</pre>
+  <h1>📷 QR Code Scanner</h1>
+  <p class="note">Place a QR code inside the box to scan automatically.</p>
 
-  <!-- jsQR library -->
-  <script src="https://unpkg.com/jsqr/dist/jsQR.js"></script>
+  <div class="scanner-container">
+    <video id="video" autoplay></video>
+    <div class="frame"></div>
+  </div>
+
+  <p id="result">Waiting for scan...</p>
+  <button id="scanAgain" style="display:none;">🔄 Scan Again</button>
 
   <script>
-    const video = document.getElementById("video");
-    const result = document.getElementById("result");
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
+    const video = document.getElementById('video');
+    const result = document.getElementById('result');
+    const scanAgainBtn = document.getElementById('scanAgain');
 
-    async function start() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
-        video.srcObject = stream;
-        await video.play();
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        requestAnimationFrame(scan);
-      } catch (err) {
-        result.textContent = "Camera error: " + err.message;
+    let currentStream;
+
+    // Start scanning function
+    function startScanner() {
+      if ('BarcodeDetector' in window) {
+        const barcodeDetector = new BarcodeDetector({ formats: ['qr_code'] });
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+          .then(stream => {
+            currentStream = stream;
+            video.srcObject = stream;
+
+            const scan = async () => {
+              try {
+                const barcodes = await barcodeDetector.detect(video);
+                if (barcodes.length > 0) {
+                  const code = barcodes[0];
+                  result.textContent = `✅ Scanned: ${code.rawValue}`;
+
+                  // Stop camera
+                  stream.getTracks().forEach(track => track.stop());
+                  scanAgainBtn.style.display = "block";
+
+                  // Redirect if link
+                  if (code.rawValue.startsWith("http")) {
+                    window.location.href = code.rawValue;
+                  }
+                } else {
+                  requestAnimationFrame(scan);
+                }
+              } catch (err) {
+                console.error("Detection failed:", err);
+                requestAnimationFrame(scan);
+              }
+            };
+            requestAnimationFrame(scan);
+          })
+          .catch(err => console.error("Camera error:", err));
+      } else {
+        result.textContent = "🚫 BarcodeDetector not supported in this browser.";
       }
     }
 
-    function scan() {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(img.data, img.width, img.height);
+    // Restart scanning
+    scanAgainBtn.addEventListener("click", () => {
+      result.textContent = "Waiting for scan...";
+      scanAgainBtn.style.display = "none";
+      startScanner();
+    });
 
-     if (code) {
-  result.textContent = "Scanned: " + code.data;
-  // 🔴 stop after found:
-  video.srcObject.getTracks().forEach(track => track.stop());
-
-  // ✅ if it's a URL, redirect:
-  if (code.data.startsWith("http")) {
-    window.location.href = code.data;
-  }
-}
-
-      
-    }
-
-    start();
+    // Start first scan
+    startScanner();
   </script>
 </body>
 </html>
-
-
